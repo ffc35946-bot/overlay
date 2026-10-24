@@ -1,24 +1,42 @@
-plugins { id 'com.android.application' }
+plugins {
+    id 'com.android.application'
+}
 
 android {
     namespace 'com.example.overlay'
-    compileSdk 34
+    compileSdk 33
+
     defaultConfig {
         applicationId "com.example.overlay"
-        minSdk 21
-        targetSdk 29
+        minSdk 23            // AQUI ESTÁ A CORREÇÃO (era 21)
+        targetSdk 33
         versionCode 1
         versionName "1.0"
-        ndk { abiFilters 'arm64-v8a' }
+        
+        externalNativeBuild {
+            cmake {
+                cppFlags ""
+            }
+        }
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
     }
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
     }
+
     externalNativeBuild {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
-            version "3.22.1"
         }
+    }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
 }
