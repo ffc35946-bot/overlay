@@ -8,19 +8,22 @@
 #include <sys/uio.h>
 #include <math.h>
 
-#define LOG_TAG "FF_MEMHACK"
+#define LOG_TAG "DeepPanel"
 
+// OFFSETS EXATOS DO SEU ARQUIVO
 #define OFFSET_INIT_BASE 0xA342EFC
 #define OFFSET_CURRENT_MATCH 0x50
 #define OFFSET_GAME 0x4
 #define OFFSET_LOCAL_PLAYER 0x94
 #define OFFSET_DICT_ENTITIES 0x68
+#define OFFSET_MAIN_CAMERA_TRANSFORM 0x28C
 #define OFFSET_VIEW_MATRIX 0xE8
-#define OFFSET_HEAD 0x49C
-#define OFFSET_CHEST 0x4A4
-#define OFFSET_ROOT 0x4B0
 #define OFFSET_AIM_ROTATION 0x440
-#define OFFSET_CAMERA_TRANSFORM 0x28C
+#define OFFSET_PLAYER_IS_DEAD 0x50
+
+#define OFFSET_BONE_HEAD 0x49C
+#define OFFSET_BONE_CHEST 0x4A4
+#define OFFSET_BONE_ROOT 0x4B0
 
 struct Vector2 { float x, y; };
 struct Vector3 { float x, y, z; };
@@ -33,7 +36,6 @@ jmethodID g_updateEntities = nullptr;
 jclass g_entityClass = nullptr;
 jmethodID g_entityInit = nullptr;
 
-// VARIÁVEIS DE CONTROLE DO MENU
 bool aimbot_on = false;
 bool esp_on = false;
 
@@ -94,7 +96,7 @@ void* hack_thread(void* arg) {
     JNIEnv* env; g_vm->AttachCurrentThread(&env, nullptr);
 
     while (true) {
-        if (aimbot_on || esp_on) { // Só executa se algum estiver ligado
+        if (aimbot_on || esp_on) {
             uintptr_t init_base = read_mem<uintptr_t>(il2cpp_base + OFFSET_INIT_BASE);
             if (init_base) {
                 uintptr_t current_match = read_mem<uintptr_t>(init_base + OFFSET_CURRENT_MATCH);
@@ -105,7 +107,7 @@ void* hack_thread(void* arg) {
                         uintptr_t entities_dict = read_mem<uintptr_t>(game + OFFSET_DICT_ENTITIES);
 
                         if (local_player && entities_dict) {
-                            uintptr_t camera_t = read_mem<uintptr_t>(local_player + OFFSET_CAMERA_TRANSFORM);
+                            uintptr_t camera_t = read_mem<uintptr_t>(local_player + OFFSET_MAIN_CAMERA_TRANSFORM);
                             Vector3 camera_pos = read_mem<Vector3>(camera_t + 0x20);
 
                             float matrix[16];
@@ -129,11 +131,11 @@ void* hack_thread(void* arg) {
                                     uintptr_t enemy = read_mem<uintptr_t>(entry + 0x10);
                                     
                                     if (enemy && enemy != local_player) {
-                                        bool is_dead = read_mem<bool>(enemy + 0x50);
+                                        bool is_dead = read_mem<bool>(enemy + OFFSET_PLAYER_IS_DEAD);
                                         if (!is_dead) {
-                                            uintptr_t head_t = read_mem<uintptr_t>(enemy + OFFSET_HEAD);
-                                            uintptr_t chest_t = read_mem<uintptr_t>(enemy + OFFSET_CHEST);
-                                            uintptr_t root_t = read_mem<uintptr_t>(enemy + OFFSET_ROOT);
+                                            uintptr_t head_t = read_mem<uintptr_t>(enemy + OFFSET_BONE_HEAD);
+                                            uintptr_t chest_t = read_mem<uintptr_t>(enemy + OFFSET_BONE_CHEST);
+                                            uintptr_t root_t = read_mem<uintptr_t>(enemy + OFFSET_BONE_ROOT);
 
                                             if (head_t && chest_t && root_t) {
                                                 Vector3 h_pos = read_mem<Vector3>(head_t + 0x20);
@@ -145,7 +147,7 @@ void* hack_thread(void* arg) {
                                                     WorldToScreen(matrix, c_pos, w, h, &sc) &&
                                                     WorldToScreen(matrix, r_pos, w, h, &sr)) {
                                                     
-                                                    if (esp_on) { // Só desenha se o ESP estiver ligado
+                                                    if (esp_on) {
                                                         float bh = sr.y - sh.y; float bw = bh * 0.45f;
                                                         jfloatArray seg = env->NewFloatArray(12);
                                                         jfloat s[12] = { sh.x, sh.y, sc.x, sc.y, sc.x, sc.y, sr.x, sr.y, sh.x, sh.y, sr.x, sr.y };
@@ -166,7 +168,7 @@ void* hack_thread(void* arg) {
                                 env->CallVoidMethod(g_overlayService, g_updateEntities, list);
                             }
 
-                            if (best_target.x != 0 && best_target.y != 0 && aimbot_on) { // Só puxa mira se o Aimbot estiver ligado
+                            if (best_target.x != 0 && best_target.y != 0 && aimbot_on) {
                                 Vector2 aim_angles = CalcAngle(camera_pos, best_target);
                                 uintptr_t aim_addr = local_player + OFFSET_AIM_ROTATION;
                                 write_mem<float>(aim_addr, aim_angles.x);
@@ -194,18 +196,12 @@ Java_com_example_overlay_OverlayService_nativeStart(JNIEnv* env, jobject thiz) {
     pthread_t pt; pthread_create(&pt, NULL, hack_thread, NULL); pthread_detach(pt);
 }
 
-// FUNÇÕES JNI PARA O MENU
 extern "C" JNIEXPORT void JNICALL
-Java_com_example_overlay_OverlayService_setAimbot(JNIEnv* env, jobject thiz, jboolean state) {
-    aimbot_on = state;
-}
+Java_com_example_overlay_OverlayService_setAimbot(JNIEnv* env, jobject thiz, jboolean state) { aimbot_on = state; }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_example_overlay_OverlayService_setEsp(JNIEnv* env, jobject thiz, jboolean state) {
-    esp_on = state;
-}
+Java_com_example_overlay_OverlayService_setEsp(JNIEnv* env, jobject thiz, jboolean state) { esp_on = state; }
 
-// Funções do Canvas
 extern "C" JNIEXPORT void JNICALL
 Java_com_example_overlay_OverlayView_nativeDraw(JNIEnv* env, jobject, jobject canvas, jobject paint, jfloatArray jBoxes, jintArray jBoxColors, jfloatArray jLines, jintArray jLineColors) {
     jclass canvasCls = env->GetObjectClass(canvas); jclass paintCls = env->GetObjectClass(paint);
