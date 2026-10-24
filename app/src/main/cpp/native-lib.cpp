@@ -10,7 +10,6 @@
 
 #define LOG_TAG "FF_MEMHACK"
 
-// OFFSETS DO FREE FIRE
 #define OFFSET_INIT_BASE 0xA342EFC
 #define OFFSET_CURRENT_MATCH 0x50
 #define OFFSET_GAME 0x4
@@ -33,6 +32,10 @@ jobject g_overlayService = nullptr;
 jmethodID g_updateEntities = nullptr;
 jclass g_entityClass = nullptr;
 jmethodID g_entityInit = nullptr;
+
+// VARIÁVEIS DE CONTROLE DO MENU
+bool aimbot_on = false;
+bool esp_on = false;
 
 inline bool WorldToScreen(const float m[16], const Vector3& p, int width, int height, Vector2* out) {
     float cx = m[0]*p.x + m[1]*p.y + m[2]*p.z + m[3];
@@ -91,80 +94,84 @@ void* hack_thread(void* arg) {
     JNIEnv* env; g_vm->AttachCurrentThread(&env, nullptr);
 
     while (true) {
-        uintptr_t init_base = read_mem<uintptr_t>(il2cpp_base + OFFSET_INIT_BASE);
-        if (init_base) {
-            uintptr_t current_match = read_mem<uintptr_t>(init_base + OFFSET_CURRENT_MATCH);
-            if (current_match) {
-                uintptr_t game = read_mem<uintptr_t>(current_match + OFFSET_GAME);
-                if (game) {
-                    uintptr_t local_player = read_mem<uintptr_t>(game + OFFSET_LOCAL_PLAYER);
-                    uintptr_t entities_dict = read_mem<uintptr_t>(game + OFFSET_DICT_ENTITIES);
+        if (aimbot_on || esp_on) { // Só executa se algum estiver ligado
+            uintptr_t init_base = read_mem<uintptr_t>(il2cpp_base + OFFSET_INIT_BASE);
+            if (init_base) {
+                uintptr_t current_match = read_mem<uintptr_t>(init_base + OFFSET_CURRENT_MATCH);
+                if (current_match) {
+                    uintptr_t game = read_mem<uintptr_t>(current_match + OFFSET_GAME);
+                    if (game) {
+                        uintptr_t local_player = read_mem<uintptr_t>(game + OFFSET_LOCAL_PLAYER);
+                        uintptr_t entities_dict = read_mem<uintptr_t>(game + OFFSET_DICT_ENTITIES);
 
-                    if (local_player && entities_dict) {
-                        uintptr_t camera_t = read_mem<uintptr_t>(local_player + OFFSET_CAMERA_TRANSFORM);
-                        Vector3 camera_pos = read_mem<Vector3>(camera_t + 0x20);
+                        if (local_player && entities_dict) {
+                            uintptr_t camera_t = read_mem<uintptr_t>(local_player + OFFSET_CAMERA_TRANSFORM);
+                            Vector3 camera_pos = read_mem<Vector3>(camera_t + 0x20);
 
-                        float matrix[16];
-                        for(int i=0; i<16; i++) matrix[i] = read_mem<float>(camera_t + OFFSET_VIEW_MATRIX + (i*4));
+                            float matrix[16];
+                            for(int i=0; i<16; i++) matrix[i] = read_mem<float>(camera_t + OFFSET_VIEW_MATRIX + (i*4));
 
-                        int w = 1080; int h = 2400;
-                        uintptr_t entries = read_mem<uintptr_t>(entities_dict + 0x18);
-                        int count = read_mem<int>(entities_dict + 0x20);
+                            int w = 1080; int h = 2400;
+                            uintptr_t entries = read_mem<uintptr_t>(entities_dict + 0x18);
+                            int count = read_mem<int>(entities_dict + 0x20);
 
-                        Vector3 best_target = {0, 0, 0};
-                        float closest_dist = 999999.0f;
+                            Vector3 best_target = {0, 0, 0};
+                            float closest_dist = 999999.0f;
 
-                        if (entries && count > 0 && count < 100) {
-                            jclass listClass = env->FindClass("java/util/ArrayList");
-                            jmethodID listInit = env->GetMethodID(listClass, "<init>", "()V");
-                            jmethodID listAdd = env->GetMethodID(listClass, "add", "(Ljava/lang/Object;)Z");
-                            jobject list = env->NewObject(listClass, listInit);
+                            if (entries && count > 0 && count < 100) {
+                                jclass listClass = env->FindClass("java/util/ArrayList");
+                                jmethodID listInit = env->GetMethodID(listClass, "<init>", "()V");
+                                jmethodID listAdd = env->GetMethodID(listClass, "add", "(Ljava/lang/Object;)Z");
+                                jobject list = env->NewObject(listClass, listInit);
 
-                            for (int i = 0; i < count; i++) {
-                                uintptr_t entry = entries + 0x20 + (i * 0x18);
-                                uintptr_t enemy = read_mem<uintptr_t>(entry + 0x10);
-                                
-                                if (enemy && enemy != local_player) {
-                                    bool is_dead = read_mem<bool>(enemy + 0x50);
-                                    if (!is_dead) {
-                                        uintptr_t head_t = read_mem<uintptr_t>(enemy + OFFSET_HEAD);
-                                        uintptr_t chest_t = read_mem<uintptr_t>(enemy + OFFSET_CHEST);
-                                        uintptr_t root_t = read_mem<uintptr_t>(enemy + OFFSET_ROOT);
+                                for (int i = 0; i < count; i++) {
+                                    uintptr_t entry = entries + 0x20 + (i * 0x18);
+                                    uintptr_t enemy = read_mem<uintptr_t>(entry + 0x10);
+                                    
+                                    if (enemy && enemy != local_player) {
+                                        bool is_dead = read_mem<bool>(enemy + 0x50);
+                                        if (!is_dead) {
+                                            uintptr_t head_t = read_mem<uintptr_t>(enemy + OFFSET_HEAD);
+                                            uintptr_t chest_t = read_mem<uintptr_t>(enemy + OFFSET_CHEST);
+                                            uintptr_t root_t = read_mem<uintptr_t>(enemy + OFFSET_ROOT);
 
-                                        if (head_t && chest_t && root_t) {
-                                            Vector3 h_pos = read_mem<Vector3>(head_t + 0x20);
-                                            Vector3 c_pos = read_mem<Vector3>(chest_t + 0x20);
-                                            Vector3 r_pos = read_mem<Vector3>(root_t + 0x20);
+                                            if (head_t && chest_t && root_t) {
+                                                Vector3 h_pos = read_mem<Vector3>(head_t + 0x20);
+                                                Vector3 c_pos = read_mem<Vector3>(chest_t + 0x20);
+                                                Vector3 r_pos = read_mem<Vector3>(root_t + 0x20);
 
-                                            Vector2 sh, sc, sr;
-                                            if (WorldToScreen(matrix, h_pos, w, h, &sh) &&
-                                                WorldToScreen(matrix, c_pos, w, h, &sc) &&
-                                                WorldToScreen(matrix, r_pos, w, h, &sr)) {
-                                                
-                                                float bh = sr.y - sh.y; float bw = bh * 0.45f;
-                                                jfloatArray seg = env->NewFloatArray(12);
-                                                jfloat s[12] = { sh.x, sh.y, sc.x, sc.y, sc.x, sc.y, sr.x, sr.y, sh.x, sh.y, sr.x, sr.y };
-                                                env->SetFloatArrayRegion(seg, 0, 12, s);
-                                                
-                                                jobject entity = env->NewObject(g_entityClass, g_entityInit, sh.x - bw/2, sh.y, bw, bh, 0xFFFF0000, seg, 0xFFFFFFFF);
-                                                env->CallBooleanMethod(list, listAdd, entity);
+                                                Vector2 sh, sc, sr;
+                                                if (WorldToScreen(matrix, h_pos, w, h, &sh) &&
+                                                    WorldToScreen(matrix, c_pos, w, h, &sc) &&
+                                                    WorldToScreen(matrix, r_pos, w, h, &sr)) {
+                                                    
+                                                    if (esp_on) { // Só desenha se o ESP estiver ligado
+                                                        float bh = sr.y - sh.y; float bw = bh * 0.45f;
+                                                        jfloatArray seg = env->NewFloatArray(12);
+                                                        jfloat s[12] = { sh.x, sh.y, sc.x, sc.y, sc.x, sc.y, sr.x, sr.y, sh.x, sh.y, sr.x, sr.y };
+                                                        env->SetFloatArrayRegion(seg, 0, 12, s);
+                                                        
+                                                        jobject entity = env->NewObject(g_entityClass, g_entityInit, sh.x - bw/2, sh.y, bw, bh, 0xFFFF0000, seg, 0xFFFFFFFF);
+                                                        env->CallBooleanMethod(list, listAdd, entity);
+                                                    }
 
-                                                float dx = camera_pos.x - h_pos.x; float dy = camera_pos.y - h_pos.y; float dz = camera_pos.z - h_pos.z;
-                                                float dist = sqrt(dx*dx + dy*dy + dz*dz);
-                                                if (dist < closest_dist && dist > 0.1f) { closest_dist = dist; best_target = h_pos; }
+                                                    float dx = camera_pos.x - h_pos.x; float dy = camera_pos.y - h_pos.y; float dz = camera_pos.z - h_pos.z;
+                                                    float dist = sqrt(dx*dx + dy*dy + dz*dz);
+                                                    if (dist < closest_dist && dist > 0.1f) { closest_dist = dist; best_target = h_pos; }
+                                                }
                                             }
                                         }
                                     }
                                 }
+                                env->CallVoidMethod(g_overlayService, g_updateEntities, list);
                             }
-                            env->CallVoidMethod(g_overlayService, g_updateEntities, list);
-                        }
 
-                        if (best_target.x != 0 && best_target.y != 0) {
-                            Vector2 aim_angles = CalcAngle(camera_pos, best_target);
-                            uintptr_t aim_addr = local_player + OFFSET_AIM_ROTATION;
-                            write_mem<float>(aim_addr, aim_angles.x);
-                            write_mem<float>(aim_addr + 0x4, aim_angles.y);
+                            if (best_target.x != 0 && best_target.y != 0 && aimbot_on) { // Só puxa mira se o Aimbot estiver ligado
+                                Vector2 aim_angles = CalcAngle(camera_pos, best_target);
+                                uintptr_t aim_addr = local_player + OFFSET_AIM_ROTATION;
+                                write_mem<float>(aim_addr, aim_angles.x);
+                                write_mem<float>(aim_addr + 0x4, aim_angles.y);
+                            }
                         }
                     }
                 }
@@ -187,6 +194,18 @@ Java_com_example_overlay_OverlayService_nativeStart(JNIEnv* env, jobject thiz) {
     pthread_t pt; pthread_create(&pt, NULL, hack_thread, NULL); pthread_detach(pt);
 }
 
+// FUNÇÕES JNI PARA O MENU
+extern "C" JNIEXPORT void JNICALL
+Java_com_example_overlay_OverlayService_setAimbot(JNIEnv* env, jobject thiz, jboolean state) {
+    aimbot_on = state;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_example_overlay_OverlayService_setEsp(JNIEnv* env, jobject thiz, jboolean state) {
+    esp_on = state;
+}
+
+// Funções do Canvas
 extern "C" JNIEXPORT void JNICALL
 Java_com_example_overlay_OverlayView_nativeDraw(JNIEnv* env, jobject, jobject canvas, jobject paint, jfloatArray jBoxes, jintArray jBoxColors, jfloatArray jLines, jintArray jLineColors) {
     jclass canvasCls = env->GetObjectClass(canvas); jclass paintCls = env->GetObjectClass(paint);
